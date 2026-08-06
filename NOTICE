@@ -1,0 +1,17 @@
+SigLIP SO400M 384 for Core ML
+Copyright 2026 miracle2k contributors
+
+This distribution contains a converted form of
+google/siglip-so400m-patch14-384, revision
+9fdffc58afc957d1a03a25b10dba0329ab15c2a3, which declares the Apache License
+2.0.
+
+Modifications include extracting the vision tower, adding L2 normalization to
+the exported graph, converting it to a Core ML ML Program, and applying scalar
+per-tensor k-means palettization.
+
+SigLIP was introduced by Zhai et al. in "Sigmoid Loss for Language Image
+Pre-Training" (https://arxiv.org/abs/2303.15343).
+
+This project is not affiliated with or endorsed by Google, Hugging Face, or
+Apple.

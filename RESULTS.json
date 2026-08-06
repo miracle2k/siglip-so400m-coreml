@@ -1,0 +1,51 @@
+{
+  "date": "2026-08-06",
+  "environment": {
+    "compute_units": "ALL",
+    "hardware": "Apple M4 Pro, 48 GiB unified memory",
+    "macos": "15.7.7"
+  },
+  "scope": {
+    "eligible_identities": 8,
+    "private_corpus": true,
+    "records": 86,
+    "splits": 20,
+    "warning": "Exploratory regression evidence, not a general accuracy claim or an iPhone benchmark."
+  },
+  "validation": {
+    "coreml_cpu_execution": "passed for P8 and P6",
+    "deterministic_release_rebuild": "passed for P8 and P6",
+    "physical_iphone": false,
+    "xcode_16_3_compile_ios_17": "passed for P8 and P6"
+  },
+  "variants": {
+    "fp16_reference": {
+      "median_warm_latency_ms": 141.2,
+      "package_bytes": 854140080,
+      "top1_recall": 0.8470108695652175,
+      "top5_recall": 0.9480237154150197
+    },
+    "p6": {
+      "conditional_top1": 0.8653679653679655,
+      "mean_cosine_vs_pytorch": 0.982413,
+      "median_warm_latency_ms": 114.1,
+      "package_bytes": 321091261,
+      "package_tree_sha256_before_release_metadata": "429cf60610f26120c485ae7be19c966731381a9ce0b5f2d6b5258b5ab3e53193",
+      "top1_recall": 0.8200345849802371,
+      "top5_recall": 0.9448987154150197
+    },
+    "p8": {
+      "conditional_top1": 0.8770562770562771,
+      "mean_cosine_vs_pytorch": 0.998084,
+      "median_warm_latency_ms": 119.6,
+      "package_bytes": 427777381,
+      "package_tree_sha256_before_release_metadata": "8ab594c40abb7b9f658ce38e812de82ca70a5407f54e9c2dd471567754f8aa40",
+      "top1_recall": 0.8312005928853756,
+      "top5_recall": 0.9480237154150197
+    },
+    "pytorch_reference": {
+      "top1_recall": 0.8312005928853756,
+      "top5_recall": 0.9480237154150197
+    }
+  }
+}
