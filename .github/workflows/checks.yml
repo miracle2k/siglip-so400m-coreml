@@ -17,5 +17,5 @@ jobs:
         with:
           version: "0.11.26"
       - run: uv lock --check
-      - run: python3 -m py_compile convert.py release.py verify.py
+      - run: python3 -m py_compile benchmark_imagenet_v2.py convert.py release.py verify.py
       - run: python3 -m zipfile --test tests/reference_outputs.npz

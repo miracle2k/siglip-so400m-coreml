@@ -28,11 +28,17 @@ MODEL_ID = "google/siglip-so400m-patch14-384"
 MODEL_REVISION = "9fdffc58afc957d1a03a25b10dba0329ab15c2a3"
 INPUT_SIZE = 384
 OUTPUT_DIM = 1152
-RELEASE_VERSION = "0.1.0"
+RELEASE_VERSION = "0.2.0"
 VARIANTS = {
     "p8": {
         "bits": 8,
         "filename": "SigLIPSO400M384-P8.mlpackage",
+        "fp16_filename": "SigLIPSO400M384-FP16.mlpackage",
+        "minimum_deployment_target": "iOS17",
+        "granularity": "per_tensor",
+        "group_size": None,
+        "quantization": "palette-kmeans-8bit-per-tensor",
+        "compression": "kmeans-8bit-scalar-per-tensor",
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
             "rgb-square-bicubic384-v1:coreml-p8-kmeans8pt-v1"
@@ -41,9 +47,29 @@ VARIANTS = {
     "p6": {
         "bits": 6,
         "filename": "SigLIPSO400M384-P6.mlpackage",
+        "fp16_filename": "SigLIPSO400M384-FP16.mlpackage",
+        "minimum_deployment_target": "iOS17",
+        "granularity": "per_tensor",
+        "group_size": None,
+        "quantization": "palette-kmeans-6bit-per-tensor",
+        "compression": "kmeans-6bit-scalar-per-tensor",
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
             "rgb-square-bicubic384-v1:coreml-p6-kmeans6pt-v1"
+        ),
+    },
+    "p6g16": {
+        "bits": 6,
+        "filename": "SigLIPSO400M384-P6G16.mlpackage",
+        "fp16_filename": "SigLIPSO400M384-iOS18-FP16.mlpackage",
+        "minimum_deployment_target": "iOS18",
+        "granularity": "per_grouped_channel",
+        "group_size": 16,
+        "quantization": "palette-kmeans-6bit-grouped-channel-16",
+        "compression": "kmeans-6bit-scalar-per-grouped-channel-16",
+        "embedding_space_id": (
+            "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
+            "rgb-square-bicubic384-v1:coreml-p6g16-kmeans6gc16-v1"
         ),
     },
 }
@@ -137,7 +163,7 @@ def load_torch_model() -> SiglipEmbedding:
     return SiglipEmbedding(tower).cpu().eval()
 
 
-def set_common_metadata(model: ct.models.MLModel) -> None:
+def set_common_metadata(model: ct.models.MLModel, minimum_deployment_target: str) -> None:
     model.author = "miracle2k"
     model.license = "Apache-2.0; derived from google/siglip-so400m-patch14-384"
     model.version = RELEASE_VERSION
@@ -155,14 +181,16 @@ def set_common_metadata(model: ct.models.MLModel) -> None:
             "input_transform": "RGB uint8 -> x / 127.5 - 1",
             "output_transform": "L2 normalization",
             "embedding_dimension": str(OUTPUT_DIM),
-            "minimum_deployment_target": "iOS17",
+            "minimum_deployment_target": minimum_deployment_target,
             "release_repository": "https://github.com/miracle2k/siglip-so400m-coreml",
             "release_version": RELEASE_VERSION,
         }
     )
 
 
-def convert_fp16(output: Path, trace_path: Path) -> dict[str, Any]:
+def convert_fp16(
+    output: Path, trace_path: Path, minimum_deployment_target: str
+) -> dict[str, Any]:
     wrapped = load_torch_model()
     example = torch.linspace(
         -1.0,
@@ -192,6 +220,12 @@ def convert_fp16(output: Path, trace_path: Path) -> dict[str, Any]:
     trace_seconds = time.perf_counter() - started
 
     started = time.perf_counter()
+    try:
+        deployment_target = getattr(ct.target, minimum_deployment_target)
+    except AttributeError as error:
+        raise ValueError(
+            f"Unsupported Core ML deployment target: {minimum_deployment_target}"
+        ) from error
     model = ct.convert(
         traced,
         source="pytorch",
@@ -206,17 +240,18 @@ def convert_fp16(output: Path, trace_path: Path) -> dict[str, Any]:
             )
         ],
         outputs=[ct.TensorType(name="embedding", dtype=np.float32)],
-        minimum_deployment_target=ct.target.iOS17,
+        minimum_deployment_target=deployment_target,
         compute_precision=ct.precision.FLOAT16,
         compute_units=ct.ComputeUnit.ALL,
     )
-    set_common_metadata(model)
+    set_common_metadata(model, minimum_deployment_target)
     model.user_defined_metadata["quantization"] = "fp16"
     save_model(model, output)
     del wrapped, traced, model
     gc.collect()
     return {
         "conversion_seconds": time.perf_counter() - started,
+        "minimum_deployment_target": minimum_deployment_target,
         "package_bytes": package_size(output),
         "package_tree_sha256": package_tree_sha256(output),
         "trace_seconds": trace_seconds,
@@ -227,30 +262,36 @@ def compress(fp16_path: Path, output: Path, variant: str) -> dict[str, Any]:
     config = VARIANTS[variant]
     started = time.perf_counter()
     baseline = ct.models.MLModel(str(fp16_path), compute_units=ct.ComputeUnit.CPU_ONLY)
+    palette_options: dict[str, Any] = {
+        "mode": "kmeans",
+        "nbits": int(config["bits"]),
+        "granularity": str(config["granularity"]),
+        "cluster_dim": 1,
+        "enable_per_channel_scale": False,
+        "num_kmeans_workers": min(8, os.cpu_count() or 1),
+        "weight_threshold": 2048,
+    }
+    if config["group_size"] is not None:
+        palette_options["group_size"] = int(config["group_size"])
     palette = cto.coreml.OpPalettizerConfig(
-        mode="kmeans",
-        nbits=int(config["bits"]),
-        granularity="per_tensor",
-        cluster_dim=1,
-        enable_per_channel_scale=False,
-        num_kmeans_workers=min(8, os.cpu_count() or 1),
-        weight_threshold=2048,
+        **palette_options,
     )
     compressed = cto.coreml.palettize_weights(
         baseline,
         config=cto.coreml.OptimizationConfig(global_config=palette),
     )
-    set_common_metadata(compressed)
+    set_common_metadata(compressed, str(config["minimum_deployment_target"]))
     compressed.user_defined_metadata.update(
         {
             "embedding_space_id": str(config["embedding_space_id"]),
-            "quantization": f"palette-kmeans-{config['bits']}bit-per-tensor",
+            "quantization": str(config["quantization"]),
         }
     )
     save_model(compressed, output)
     result = {
-        "compression": f"kmeans-{config['bits']}bit-scalar-per-tensor",
+        "compression": str(config["compression"]),
         "compression_seconds": time.perf_counter() - started,
+        "minimum_deployment_target": config["minimum_deployment_target"],
         "package_bytes": package_size(output),
         "package_tree_sha256": package_tree_sha256(output),
     }
@@ -296,10 +337,10 @@ def main() -> None:
 
     output = args.output.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
-    fp16_path = output / "SigLIPSO400M384-FP16.mlpackage"
 
     if args.worker:
         variant = args.worker
+        fp16_path = output / str(VARIANTS[variant]["fp16_filename"])
         result = compress(
             fp16_path, output / str(VARIANTS[variant]["filename"]), variant
         )
@@ -319,11 +360,40 @@ def main() -> None:
         "model_revision": MODEL_REVISION,
         "variants": {},
     }
-    if not args.reuse_fp16:
-        report["fp16"] = convert_fp16(fp16_path, output / "SigLIPSO400M384-traced.pt")
-    elif not fp16_path.exists():
-        raise FileNotFoundError(f"Missing FP16 intermediate: {fp16_path.name}")
-    report["fp16_smoke_test"] = smoke_test(fp16_path)
+    fp16_paths: dict[str, Path] = {}
+    for variant in args.variants:
+        config = VARIANTS[variant]
+        target = str(config["minimum_deployment_target"])
+        fp16_path = output / str(config["fp16_filename"])
+        existing = fp16_paths.setdefault(target, fp16_path)
+        if existing != fp16_path:
+            raise ValueError(f"Conflicting FP16 bases for {target}")
+
+    fp16_results: dict[str, dict[str, Any]] = {}
+    fp16_smoke_tests: dict[str, dict[str, Any]] = {}
+    for target, fp16_path in fp16_paths.items():
+        if not args.reuse_fp16:
+            trace_name = (
+                "SigLIPSO400M384-traced.pt"
+                if target == "iOS17"
+                else f"SigLIPSO400M384-{target}-traced.pt"
+            )
+            fp16_results[target] = convert_fp16(
+                fp16_path, output / trace_name, target
+            )
+        elif not fp16_path.exists():
+            raise FileNotFoundError(f"Missing FP16 intermediate: {fp16_path.name}")
+        fp16_smoke_tests[target] = smoke_test(fp16_path)
+
+    if len(fp16_paths) == 1:
+        only_target = next(iter(fp16_paths))
+        if not args.reuse_fp16:
+            report["fp16"] = fp16_results[only_target]
+        report["fp16_smoke_test"] = fp16_smoke_tests[only_target]
+    else:
+        if not args.reuse_fp16:
+            report["fp16"] = fp16_results
+        report["fp16_smoke_test"] = fp16_smoke_tests
     write_json(output / "build-report.json", report)
 
     for variant in args.variants:

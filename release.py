@@ -19,12 +19,15 @@ import coremltools as ct
 
 MODEL_ID = "google/siglip-so400m-patch14-384"
 MODEL_REVISION = "9fdffc58afc957d1a03a25b10dba0329ab15c2a3"
-RELEASE_VERSION = "0.1.0"
+RELEASE_VERSION = "0.2.0"
 REPOSITORY = "https://github.com/miracle2k/siglip-so400m-coreml"
 VARIANTS = {
     "p8": {
         "bits": 8,
+        "compression": "kmeans-8bit-scalar-per-tensor",
+        "minimum_deployment_target": "iOS17",
         "model_graph_sha256": "2f64d448265107972b2c41fa7a13f4e436b76c4f819e23d9131f1c7b26b32472",
+        "quantization": "palette-kmeans-8bit-per-tensor",
         "weights_sha256": "0e84cef4bcb2fd9c4eee9496809248463998506c7185f57e720a44f874aa04d9",
         "filename": "SigLIPSO400M384-P8.mlpackage",
         "recommended": True,
@@ -35,13 +38,31 @@ VARIANTS = {
     },
     "p6": {
         "bits": 6,
+        "compression": "kmeans-6bit-scalar-per-tensor",
+        "minimum_deployment_target": "iOS17",
         "model_graph_sha256": "b888adaf476936ca40eb28b3f27c2b005163d341040d3f415588078a12e11dfd",
+        "quantization": "palette-kmeans-6bit-per-tensor",
         "weights_sha256": "d583e30c3583d935ba5b15c3c0adfdbb172779aee40bf63f8973017c0cd194fd",
         "filename": "SigLIPSO400M384-P6.mlpackage",
         "recommended": False,
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
             "rgb-square-bicubic384-v1:coreml-p6-kmeans6pt-v1"
+        ),
+    },
+    "p6g16": {
+        "bits": 6,
+        "compression": "kmeans-6bit-scalar-per-grouped-channel-16",
+        "minimum_deployment_target": "iOS18",
+        "model_graph_sha256": "c9de8d03751a01339314e70d76c6af8b276c21ee578570dbe075f581ca5019a8",
+        "quantization": "palette-kmeans-6bit-grouped-channel-16",
+        "required_source_package_tree_sha256": "708fd43a1ed2f9ca1d5097c97c5890fe3d5551c4a31c9df1bdedc55826c17b21",
+        "weights_sha256": "782c2b3c305b8826151f334a93d0de558a65d705963f138d17ab9c5d540e0843",
+        "filename": "SigLIPSO400M384-P6G16.mlpackage",
+        "recommended": False,
+        "embedding_space_id": (
+            "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
+            "rgb-square-bicubic384-v1:coreml-p6g16-kmeans6gc16-v1"
         ),
     },
 }
@@ -123,11 +144,18 @@ def validate_source(source: Path, variant: str) -> tuple[Path, Any, str, str, st
         or metadata.userDefined.get("model_revision") != MODEL_REVISION
     ):
         raise ValueError(f"Unexpected model provenance in {source.name}")
-    expected_quantization = f"palette-kmeans-{config['bits']}bit-per-tensor"
-    if metadata.userDefined.get("quantization") != expected_quantization:
+    if metadata.userDefined.get("quantization") != config["quantization"]:
         raise ValueError(f"Unexpected quantization in {source.name}")
+    if (
+        metadata.userDefined.get("minimum_deployment_target")
+        != config["minimum_deployment_target"]
+    ):
+        raise ValueError(f"Unexpected deployment target in {source.name}")
 
     source_tree_hash = tree_sha256(source)
+    expected_source_tree_hash = config.get("required_source_package_tree_sha256")
+    if expected_source_tree_hash and source_tree_hash != expected_source_tree_hash:
+        raise ValueError(f"Unexpected source package tree in {source.name}")
     source_weight_hash = file_sha256(weight_path(source))
     graph_hash = model_graph_sha256(specification)
     if source_weight_hash != config["weights_sha256"]:
@@ -138,7 +166,10 @@ def validate_source(source: Path, variant: str) -> tuple[Path, Any, str, str, st
 
 
 def stamp(
-    validated: tuple[Path, Any, str, str, str], destination: Path, variant: str
+    validated: tuple[Path, Any, str, str, str],
+    destination: Path,
+    variant: str,
+    release_version: str,
 ) -> dict[str, Any]:
     source, specification, source_tree_hash, source_weight_hash, graph_hash = validated
     destination = destination.resolve()
@@ -155,12 +186,12 @@ def stamp(
     shutil.copytree(source, destination)
     metadata.author = "miracle2k"
     metadata.license = "Apache-2.0; derived from google/siglip-so400m-patch14-384"
-    metadata.versionString = RELEASE_VERSION
+    metadata.versionString = release_version
     metadata.userDefined.update(
         {
             "embedding_space_id": str(config["embedding_space_id"]),
             "release_repository": REPOSITORY,
-            "release_version": RELEASE_VERSION,
+            "release_version": release_version,
         }
     )
     model_path(destination).write_bytes(
@@ -223,30 +254,42 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--p8", type=Path, required=True)
-    parser.add_argument("--p6", type=Path, required=True)
+    for variant in VARIANTS:
+        parser.add_argument(f"--{variant}", type=Path)
     parser.add_argument("--dist", type=Path, default=Path("dist"))
+    parser.add_argument("--release-version", default=RELEASE_VERSION)
+    parser.add_argument("--write-root-metadata", action="store_true")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent
     dist = args.dist.expanduser().resolve()
     source_paths = {
-        "p8": args.p8.expanduser().resolve(),
-        "p6": args.p6.expanduser().resolve(),
+        variant: supplied.expanduser().resolve()
+        for variant in VARIANTS
+        if (supplied := getattr(args, variant)) is not None
     }
+    if not source_paths:
+        parser.error("At least one source package is required")
+    if args.write_root_metadata and set(source_paths) != set(VARIANTS):
+        parser.error(
+            "--write-root-metadata requires a complete P8, P6, and P6G16 release bundle"
+        )
     validated = {
         variant: validate_source(source_paths[variant], variant)
-        for variant in ("p8", "p6")
+        for variant in source_paths
     }
     packages = dist / "packages"
     packages.mkdir(parents=True, exist_ok=True)
     artifacts: list[dict[str, Any]] = []
 
-    for variant in ("p8", "p6"):
+    for variant in source_paths:
         config = VARIANTS[variant]
         package = packages / str(config["filename"])
-        details = stamp(validated[variant], package, variant)
-        archive_name = f"{package.stem}-iOS17-v{RELEASE_VERSION}.mlpackage.zip"
+        details = stamp(validated[variant], package, variant, args.release_version)
+        archive_name = (
+            f"{package.stem}-{config['minimum_deployment_target']}-"
+            f"v{args.release_version}.mlpackage.zip"
+        )
         archive_path = dist / archive_name
         deterministic_zip(package, archive_path, root)
         artifacts.append(
@@ -254,10 +297,11 @@ def main() -> None:
                 "archive_bytes": archive_path.stat().st_size,
                 "archive_filename": archive_name,
                 "archive_sha256": file_sha256(archive_path),
-                "compression": f"kmeans-{config['bits']}bit-scalar-per-tensor",
+                "compression": config["compression"],
                 "embedding_space_id": config["embedding_space_id"],
-                "minimum_deployment_target": "iOS17",
+                "minimum_deployment_target": config["minimum_deployment_target"],
                 "package_filename": package.name,
+                "quantization": config["quantization"],
                 "recommended": config["recommended"],
                 "variant": variant,
                 **details,
@@ -302,14 +346,14 @@ def main() -> None:
             "coremltools": "9.0",
             "format": "mlprogram",
             "python": ">=3.11,<3.12",
-            "source_tag": f"v{RELEASE_VERSION}",
+            "source_tag": f"v{args.release_version}",
             "torch": "2.7.0",
             "transformers": "4.48.1",
             "uv_lock_sha256": file_sha256(root / "uv.lock"),
         },
         "license": "Apache-2.0",
         "license_files_in_archives": ["LICENSE", "NOTICE"],
-        "release_version": RELEASE_VERSION,
+        "release_version": args.release_version,
         "repository": REPOSITORY,
         "results": "RESULTS.json",
         "schema_version": 1,
@@ -320,16 +364,19 @@ def main() -> None:
             "script": "verify.py",
         },
     }
-    write_json(root / "MODEL_MANIFEST.json", manifest)
-    shutil.copy2(root / "MODEL_MANIFEST.json", dist / "MODEL_MANIFEST.json")
+    manifest_path = dist / "MODEL_MANIFEST.json"
+    write_json(manifest_path, manifest)
     shutil.copy2(root / "RESULTS.json", dist / "RESULTS.json")
     checksums = "".join(
         f"{item['archive_sha256']}  {item['archive_filename']}\n" for item in artifacts
     )
-    checksums += f"{file_sha256(root / 'MODEL_MANIFEST.json')}  MODEL_MANIFEST.json\n"
+    checksums += f"{file_sha256(manifest_path)}  MODEL_MANIFEST.json\n"
     checksums += f"{file_sha256(root / 'RESULTS.json')}  RESULTS.json\n"
-    (root / "SHA256SUMS").write_text(checksums)
-    shutil.copy2(root / "SHA256SUMS", dist / "SHA256SUMS")
+    checksum_path = dist / "SHA256SUMS"
+    checksum_path.write_text(checksums)
+    if args.write_root_metadata:
+        shutil.copy2(manifest_path, root / "MODEL_MANIFEST.json")
+        shutil.copy2(checksum_path, root / "SHA256SUMS")
     print(json.dumps(manifest, indent=2, sort_keys=True))
 
 

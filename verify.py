@@ -22,6 +22,7 @@ VARIANT_BY_QUANTIZATION = {
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
             "rgb-square-bicubic384-v1:coreml-p8-kmeans8pt-v1"
         ),
+        "minimum_deployment_target": "iOS17",
         "variant": "p8",
     },
     "palette-kmeans-6bit-per-tensor": {
@@ -29,7 +30,16 @@ VARIANT_BY_QUANTIZATION = {
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
             "rgb-square-bicubic384-v1:coreml-p6-kmeans6pt-v1"
         ),
+        "minimum_deployment_target": "iOS17",
         "variant": "p6",
+    },
+    "palette-kmeans-6bit-grouped-channel-16": {
+        "embedding_space_id": (
+            "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
+            "rgb-square-bicubic384-v1:coreml-p6g16-kmeans6gc16-v1"
+        ),
+        "minimum_deployment_target": "iOS18",
+        "variant": "p6g16",
     },
 }
 
@@ -56,6 +66,8 @@ def verify(path: Path) -> tuple[str, np.ndarray, dict[str, Any]]:
         raise ValueError(f"Unexpected quantization in {path.name}")
     if metadata.get("embedding_space_id") != config["embedding_space_id"]:
         raise ValueError(f"Unexpected embedding space in {path.name}")
+    if metadata.get("minimum_deployment_target") != config["minimum_deployment_target"]:
+        raise ValueError(f"Unexpected deployment target in {path.name}")
     output = np.asarray(model.predict({"image": synthetic_image()})["embedding"])
     if output.shape != (1, OUTPUT_DIM) or output.dtype != np.float32:
         raise ValueError(
@@ -73,6 +85,7 @@ def verify(path: Path) -> tuple[str, np.ndarray, dict[str, Any]]:
         vector,
         {
             "embedding_space_id": config["embedding_space_id"],
+            "minimum_deployment_target": config["minimum_deployment_target"],
             "compute_units": "CPU_ONLY",
             "finite": True,
             "model": path.name,
@@ -87,7 +100,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("packages", type=Path, nargs="+")
     parser.add_argument(
-        "--reference", type=Path, default=Path("tests/reference_outputs.npz")
+        "--reference",
+        type=Path,
+        default=Path(__file__).resolve().parent / "tests/reference_outputs.npz",
     )
     parser.add_argument("--write-reference", action="store_true")
     args = parser.parse_args()
@@ -103,12 +118,25 @@ def main() -> None:
 
     reference_path = args.reference.expanduser().resolve()
     if args.write_reference:
+        stored_vectors: dict[str, np.ndarray] = {}
+        if reference_path.exists():
+            with np.load(reference_path, allow_pickle=False) as reference:
+                if str(reference["model_id"].item()) != MODEL_ID:
+                    raise ValueError("Reference model ID does not match")
+                if str(reference["model_revision"].item()) != MODEL_REVISION:
+                    raise ValueError("Reference model revision does not match")
+                stored_vectors = {
+                    name: np.asarray(reference[name], dtype=np.float32)
+                    for name in reference.files
+                    if name not in {"model_id", "model_revision"}
+                }
+        stored_vectors.update(vectors)
         reference_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             reference_path,
             model_id=np.asarray(MODEL_ID),
             model_revision=np.asarray(MODEL_REVISION),
-            **vectors,
+            **stored_vectors,
         )
     else:
         with np.load(reference_path, allow_pickle=False) as reference:
