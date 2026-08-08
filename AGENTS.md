@@ -1,6 +1,9 @@
 Include in this repo: concise summary of the history of key experiments attempted, both successes and failures, focused exclusively on "make this model run on iOS/Apple platforms".
 
-Do not include one-off artifacts, temporary spec files or notes. No file paths or data referencing a particular developer environment. Anything in here is either about how to recreate a particular model build, or data about how one performed.
+Do not include one-off artifacts, temporary spec files or notes. No file paths or data referencing a particular developer environment. Do not talk about the models general API or purpose - focus on our contributions. Anything in here is either about how to recreate a particular model build, or data about how one performed.
+
+Notes on how to contribute to the repo should be concise and only in AGENTS.md. README.md is for people wanting to consume the models and results, and explain where to find both.
+
 
 # Publishing model artifacts
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the SigLIP ImageNet-v2 zero-shot protocol against Core ML packages.
+"""Measure Core ML conversion fidelity with a pinned ImageNet-v2 protocol.
 
 The benchmark intentionally reads class names and prompts from a pinned
 checkout of google-research/big_vision instead of carrying a second copy.
@@ -15,7 +15,6 @@ import gc
 import hashlib
 import json
 import os
-import platform
 import re
 import string
 import subprocess
@@ -509,7 +508,6 @@ def evaluate_pytorch(
     np.save(durations_path, durations_array, allow_pickle=False)
     metrics, predictions, correct = classification_metrics(embeddings, labels, prototypes)
     result = {
-        "device": str(device),
         "metrics": metrics,
         "model": MODEL_ID,
         "model_revision": MODEL_REVISION,
@@ -679,13 +677,10 @@ def main() -> None:
         },
         "cache": cache_metadata,
         "comparisons": compare_variants(work_dir, variants),
-        "environment": {
+        "toolchain": {
             "coremltools": ct.__version__,
-            "hardware": platform.machine(),
-            "macos": platform.mac_ver()[0],
             "numpy": np.__version__,
             "torch": torch.__version__,
-            "torch_device": str(device),
         },
         "model_id": MODEL_ID,
         "model_revision": MODEL_REVISION,

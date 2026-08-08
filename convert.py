@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert and palettize the pinned SigLIP SO400M vision tower."""
+"""Convert and palettize the pinned checkpoint for Core ML."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import gc
 import hashlib
 import json
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -345,11 +344,9 @@ def main() -> None:
         return
 
     report: dict[str, Any] = {
-        "environment": {
+        "toolchain": {
             "coremltools": ct.__version__,
-            "machine": platform.machine(),
-            "macos": platform.mac_ver()[0],
-            "python": platform.python_version(),
+            "python": ".".join(str(part) for part in sys.version_info[:3]),
             "torch": torch.__version__,
             "transformers": transformers_version,
         },

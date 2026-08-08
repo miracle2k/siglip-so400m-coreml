@@ -1,7 +1,7 @@
 [project]
 name = "siglip-so400m-coreml"
 version = "0.1.0"
-description = "Reproducible Core ML conversion and palettization of the SigLIP SO400M 384px vision tower"
+description = "Reproducible Core ML conversion and palettization for Apple platforms"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "coremltools==9.0",

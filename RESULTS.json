@@ -1,121 +1,116 @@
 {
-  "date": "2026-08-07",
-  "environment": {
-    "compute_units": "ALL",
-    "hardware": "Apple M4 Pro, 48 GiB unified memory",
-    "macos": "15.7.7"
-  },
-  "scope": {
-    "eligible_identities": 8,
-    "private_corpus": true,
-    "records": 86,
-    "splits": 20,
-    "warning": "Exploratory regression evidence, not a general accuracy claim or an iPhone benchmark."
-  },
-  "validation": {
-    "coreml_cpu_execution": "passed for P8 and P6",
-    "deterministic_release_rebuild": "passed for P8 and P6",
-    "physical_iphone": false,
-    "p6g16_candidate_1_cpu_execution": "passed",
-    "p6g16_candidate_1_deterministic_artifact_rebuild": "passed",
-    "p6g16_candidate_1_xcode_16_3_compile_ios_18": "passed",
-    "xcode_16_3_compile_ios_17": "passed for P8 and P6"
-  },
-  "public_zero_shot_benchmark": {
-    "accuracy_units": "fraction",
-    "date": "2026-08-07",
-    "dataset": {
-      "archive_sha256": "f0c37fdf925916b19ea1323cd9a2208cdb6959ba2c32eef2a7fc393835c9ca7c",
-      "image_count": 10000,
-      "name": "imagenet_v2/matched-frequency:3.0.0"
+  "as_of": "2026-08-07",
+  "hub_repository": "metaclass/siglip-so400m-patch14-384-coreml",
+  "hub_publish_commit": "14bcca9d51611c54adc935057f81bcc8f22f2eeb",
+  "published_artifacts": {
+    "p8/r1": {
+      "archive": {
+        "bytes": 403610178,
+        "sha256": "28fd93f254d56dcfa2c9155c7d65d86d9fe63d688a12012621660f17db9f0738"
+      },
+      "minimum_deployment_target": "iOS17",
+      "status": "stable"
     },
-    "protocol": {
-      "big_vision_commit": "430df79cd16dd6f7f882fd8c0ed2e7c9ea4c1db8",
-      "id": "big-vision-imagenet-v2-zero-shot-v1",
-      "prompt_templates": 81,
-      "published_siglip_so400m_384_top1": 0.772
+    "p6/r1": {
+      "archive": {
+        "bytes": 314336486,
+        "sha256": "ae94fa8f3d992e70a58fb05b642f408fe5caae317f1dbe988c8b056a220cc045"
+      },
+      "minimum_deployment_target": "iOS17",
+      "status": "experimental"
     },
-    "scope": "Public semantic zero-shot regression evidence. It does not measure same-instance photo retrieval or physical iPhone performance.",
+    "p6g16/candidate.1": {
+      "archive": {
+        "bytes": 319112765,
+        "sha256": "fdbc316249c5f25b05ccdc31a07ceb284e8827b38073ed20941352e2da2aba50"
+      },
+      "minimum_deployment_target": "iOS18",
+      "status": "candidate"
+    }
+  },
+  "apple_platform_validation": {
+    "p8/r1": {
+      "coreml_cpu_execution": "passed",
+      "deterministic_artifact_rebuild": "passed",
+      "physical_iphone": "not yet tested",
+      "xcode_16_3_compile": "passed for iOS17"
+    },
+    "p6/r1": {
+      "coreml_cpu_execution": "passed",
+      "deterministic_artifact_rebuild": "passed",
+      "physical_iphone": "not yet tested",
+      "xcode_16_3_compile": "passed for iOS17"
+    },
+    "p6g16/candidate.1": {
+      "coreml_cpu_execution": "passed",
+      "deterministic_artifact_rebuild": "passed",
+      "physical_iphone": "not yet tested",
+      "xcode_16_3_compile": "passed for iOS18"
+    }
+  },
+  "private_regression": {
+    "record_count": 86,
+    "split_count": 20,
+    "scope": "Fixed aggregate conversion evidence only; not a general-accuracy or physical-iPhone benchmark.",
     "variants": {
-      "fp16": {
-        "correct": 7716,
-        "median_warm_latency_ms": 141.2,
-        "package_bytes": 854140080,
-        "source_package_tree_sha256": "ea116ebfa9b4eb31ac72b6c440949b14e7fbdcb246b0c172bfc9418806599151",
-        "top1": 0.7716
+      "fp16_reference": {
+        "top1_recall": 0.8470108695652175,
+        "top5_recall": 0.9480237154150197
       },
-      "p6g16_candidate_1": {
-        "correct": 7727,
-        "minimum_deployment_target": "iOS 18",
-        "median_warm_latency_ms": 125.7,
-        "package_bytes": 324371896,
-        "source_package_tree_sha256": "708fd43a1ed2f9ca1d5097c97c5890fe3d5551c4a31c9df1bdedc55826c17b21",
-        "top1": 0.7727,
-        "vs_fp16": {
-          "embedding_cosine_mean": 0.997916761213541,
-          "paired_bootstrap_95_accuracy_delta": [
-            -0.0009,
-            0.0031
-          ],
-          "top1_delta": 0.0011
-        },
-        "vs_p8": {
-          "paired_bootstrap_95_accuracy_delta": [
-            0.0002,
-            0.0047
-          ],
-          "top1_delta": 0.0025
-        }
+      "p8/r1": {
+        "conditional_top1": 0.8770562770562771,
+        "mean_cosine_vs_reference": 0.998084,
+        "top1_recall": 0.8312005928853756,
+        "top5_recall": 0.9480237154150197
       },
-      "p8": {
-        "correct": 7702,
-        "median_warm_latency_ms": 119.7,
-        "package_bytes": 427777381,
-        "source_package_tree_sha256": "8ab594c40abb7b9f658ce38e812de82ca70a5407f54e9c2dd471567754f8aa40",
-        "top1": 0.7702,
-        "vs_fp16": {
-          "embedding_cosine_mean": 0.9990521355211734,
-          "paired_bootstrap_95_accuracy_delta": [
-            -0.003,
-            0.0001
-          ],
-          "top1_delta": -0.0014
-        }
-      },
-      "pytorch_fp32": {
-        "correct": 7716,
-        "top1": 0.7716
+      "p6/r1": {
+        "conditional_top1": 0.8653679653679655,
+        "mean_cosine_vs_reference": 0.982413,
+        "top1_recall": 0.8200345849802371,
+        "top5_recall": 0.9448987154150197
       }
     }
   },
-  "variants": {
-    "fp16_reference": {
-      "median_warm_latency_ms": 141.2,
-      "package_bytes": 854140080,
-      "top1_recall": 0.8470108695652175,
-      "top5_recall": 0.9480237154150197
+  "public_conversion_fidelity": {
+    "protocol": {
+      "big_vision_commit": "430df79cd16dd6f7f882fd8c0ed2e7c9ea4c1db8",
+      "dataset": "imagenet_v2/matched-frequency:3.0.0",
+      "dataset_archive_sha256": "f0c37fdf925916b19ea1323cd9a2208cdb6959ba2c32eef2a7fc393835c9ca7c",
+      "image_count": 10000,
+      "prompt_templates": 81,
+      "published_reference_top1": 0.772
     },
-    "p6": {
-      "conditional_top1": 0.8653679653679655,
-      "mean_cosine_vs_pytorch": 0.982413,
-      "median_warm_latency_ms": 114.1,
-      "package_bytes": 321091261,
-      "package_tree_sha256_before_release_metadata": "429cf60610f26120c485ae7be19c966731381a9ce0b5f2d6b5258b5ab3e53193",
-      "top1_recall": 0.8200345849802371,
-      "top5_recall": 0.9448987154150197
-    },
-    "p8": {
-      "conditional_top1": 0.8770562770562771,
-      "mean_cosine_vs_pytorch": 0.998084,
-      "median_warm_latency_ms": 119.6,
-      "package_bytes": 427777381,
-      "package_tree_sha256_before_release_metadata": "8ab594c40abb7b9f658ce38e812de82ca70a5407f54e9c2dd471567754f8aa40",
-      "top1_recall": 0.8312005928853756,
-      "top5_recall": 0.9480237154150197
-    },
-    "pytorch_reference": {
-      "top1_recall": 0.8312005928853756,
-      "top5_recall": 0.9480237154150197
+    "scope": "Public Core ML conversion-fidelity check; it does not measure physical-iPhone performance.",
+    "variants": {
+      "pytorch_fp32": {
+        "top1": 0.7716
+      },
+      "fp16_reference": {
+        "top1": 0.7716
+      },
+      "p8/r1": {
+        "embedding_cosine_vs_fp16_mean": 0.9990521355211734,
+        "paired_bootstrap_95_top1_delta_vs_fp16": [
+          -0.003,
+          0.0001
+        ],
+        "top1": 0.7702,
+        "top1_delta_vs_fp16": -0.0014
+      },
+      "p6g16/candidate.1": {
+        "embedding_cosine_vs_fp16_mean": 0.997916761213541,
+        "paired_bootstrap_95_top1_delta_vs_fp16": [
+          -0.0009,
+          0.0031
+        ],
+        "paired_bootstrap_95_top1_delta_vs_p8": [
+          0.0002,
+          0.0047
+        ],
+        "top1": 0.7727,
+        "top1_delta_vs_fp16": 0.0011,
+        "top1_delta_vs_p8": 0.0025
+      }
     }
   }
 }

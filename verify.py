@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load released Core ML packages and verify their public contract."""
+"""Load released Core ML packages and verify their pinned metadata."""
 
 from __future__ import annotations
 
