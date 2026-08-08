@@ -1,3 +1,7 @@
+Include in this repo: concise summary of the history of key experiments attempted, both successes and failures, focused exclusively on "make this model run on iOS/Apple platforms".
+
+Do not include one-off artifacts, temporary spec files or notes. No file paths or data referencing a particular developer environment. Anything in here is either about how to recreate a particular model build, or data about how one performed.
+
 # Publishing model artifacts
 
 This repository is source and evaluation only: never commit model archives,
