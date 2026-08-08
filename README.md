@@ -8,7 +8,9 @@ at revision 9fdffc58afc957d1a03a25b10dba0329ab15c2a3.
 
 This is a source repository. It intentionally contains no model packages,
 release ZIPs, global manifests, or checksums. Each downloadable Core ML build
-is independently published in the project Hugging Face model repository at:
+is independently published in the [project Hugging Face model
+repository](https://huggingface.co/metaclass/siglip-so400m-patch14-384-coreml)
+at:
 
     <variant>/<artifact-revision>/
 
