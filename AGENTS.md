@@ -1,13 +1,18 @@
-# Model artifacts
+# Publishing model artifacts
 
-This repository contains conversion source, tests, and evaluation notes only.
-Never commit model packages, ZIPs, manifests, or checksums; use ignored dist/.
+This repository is source and evaluation only: never commit model archives,
+manifests, or checksums.
 
-Publish each build to
-`metaclass/siglip-so400m-patch14-384-coreml` under a variant and
-artifact-revision path with its archive, manifest.json, and SHA256SUMS. Build
-from a clean committed source SHA. Never replace a published artifact; rebuilds
-get a new revision. The manifest records source commit, upstream revision,
-variant/status, iOS target, embedding_space_id, and hashes. Apps pin an exact
-artifact path and archive SHA; never follow latest. Before upload, confirm the
-target path is absent and record the resulting Hugging Face commit SHA.
+For a new `<variant>/<revision>`, from a clean committed checkout:
+
+    uv run release.py --variant <variant> --source <model.mlpackage> \
+      --artifact-revision <revision> --status <status> \
+      --output dist/<variant>/<revision>
+    (cd dist/<variant>/<revision> && shasum -a 256 -c SHA256SUMS)
+    huggingface-cli upload metaclass/siglip-so400m-patch14-384-coreml \
+      dist/<variant>/<revision> <variant>/<revision> --repo-type model \
+      --commit-message "Publish <variant>/<revision>"
+
+First confirm the Hub path is absent; after upload, record its Hub commit and
+check the Hub LFS archive SHA matches manifest.json. Never replace an artifact:
+rebuilds receive a new revision. Apps pin the exact path and archive SHA.
