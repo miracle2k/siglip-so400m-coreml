@@ -11,9 +11,9 @@ the shipped design and which were deliberately not carried forward.
 | Variant | Deployment target | Source package | Decision |
 |---|---|---:|---|
 | FP16 | iOS 17 | 854.1 MB | Fidelity reference; not distributed because of size. |
-| P8 | iOS 17 | 427.8 MB | Released default. It preserved the private regression baseline closely and is the safest compatibility choice. |
-| P6 | iOS 17 | 321.1 MB | Released as a size-first opt-in alternative, not the default: it loses measurable private retrieval fidelity. |
-| P6G16 | iOS 18 | 324.4 MB | Unreleased candidate. It uses 6-bit scalar palettes independently over output-channel groups of 16. It passed the current regression gates and public ImageNet-v2 check, but still needs physical-iPhone validation. |
+| P8 / r1 | iOS 17 | 427.8 MB | Stable default. It preserved the private regression baseline closely and is the safest compatibility choice. |
+| P6 / r1 | iOS 17 | 321.1 MB | Size-first opt-in alternative, not the default: it loses measurable private retrieval fidelity. |
+| P6G16 / candidate.1 | iOS 18 | 324.4 MB | Candidate. It uses 6-bit scalar palettes independently over output-channel groups of 16. It passed the current regression gates and public ImageNet-v2 check, but still needs physical-iPhone validation. |
 
 P6G16 has a distinct `embedding_space_id`; its vectors must never be mixed with
 P8 or P6 vectors in one index. Its grouped-palette encoding requires an
@@ -28,7 +28,7 @@ iOS 17 P8/P6 graph contracts.
 - **Keep P6 available, but do not promote it by default.** It is smaller and a
   little faster than P8, but its private retrieval regression is outside the
   default-quality budget.
-- **Stage P6G16 rather than release it.** It is 24.2% smaller than P8, near P8
+- **Keep P6G16 as a candidate.** It is 24.2% smaller than P8, near P8
   latency on the test M4 Pro, and scored 77.27% top-1 on the pinned public
   ImageNet-v2 protocol (P8: 77.02%; FP16: 77.16%). That is useful corroboration,
   not proof of a general improvement over FP16 or a substitute for device tests.
@@ -72,5 +72,5 @@ The original private fixture builder, retrieval evaluator, remote-machine runner
 raw candidate vectors, packages from rejected trials, and machine-specific
 experiment scripts are intentionally omitted. They were valuable for the search,
 but would not make this public repository reproducible or understandable. The
-repository retains only the conversion/release mechanics for P8, P6, and P6G16,
+repository retains only the conversion/packaging mechanics for P8, P6, and P6G16,
 the public benchmark, compact aggregate results, and the decisions above.

@@ -28,7 +28,6 @@ MODEL_ID = "google/siglip-so400m-patch14-384"
 MODEL_REVISION = "9fdffc58afc957d1a03a25b10dba0329ab15c2a3"
 INPUT_SIZE = 384
 OUTPUT_DIM = 1152
-RELEASE_VERSION = "0.2.0"
 VARIANTS = {
     "p8": {
         "bits": 8,
@@ -166,7 +165,7 @@ def load_torch_model() -> SiglipEmbedding:
 def set_common_metadata(model: ct.models.MLModel, minimum_deployment_target: str) -> None:
     model.author = "miracle2k"
     model.license = "Apache-2.0; derived from google/siglip-so400m-patch14-384"
-    model.version = RELEASE_VERSION
+    model.version = "unpackaged"
     model.short_description = (
         "SigLIP SO400M 384px vision tower; L2-normalized 1152-vector"
     )
@@ -182,8 +181,6 @@ def set_common_metadata(model: ct.models.MLModel, minimum_deployment_target: str
             "output_transform": "L2 normalization",
             "embedding_dimension": str(OUTPUT_DIM),
             "minimum_deployment_target": minimum_deployment_target,
-            "release_repository": "https://github.com/miracle2k/siglip-so400m-coreml",
-            "release_version": RELEASE_VERSION,
         }
     )
 

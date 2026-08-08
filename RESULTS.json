@@ -16,9 +16,9 @@
     "coreml_cpu_execution": "passed for P8 and P6",
     "deterministic_release_rebuild": "passed for P8 and P6",
     "physical_iphone": false,
-    "p6g16_v0_2_0_candidate_cpu_execution": "passed",
-    "p6g16_v0_2_0_candidate_deterministic_release_rebuild": "passed",
-    "p6g16_v0_2_0_candidate_xcode_16_3_compile_ios_18": "passed",
+    "p6g16_candidate_1_cpu_execution": "passed",
+    "p6g16_candidate_1_deterministic_artifact_rebuild": "passed",
+    "p6g16_candidate_1_xcode_16_3_compile_ios_18": "passed",
     "xcode_16_3_compile_ios_17": "passed for P8 and P6"
   },
   "public_zero_shot_benchmark": {
@@ -44,7 +44,7 @@
         "source_package_tree_sha256": "ea116ebfa9b4eb31ac72b6c440949b14e7fbdcb246b0c172bfc9418806599151",
         "top1": 0.7716
       },
-      "p6g16_unreleased_candidate": {
+      "p6g16_candidate_1": {
         "correct": 7727,
         "minimum_deployment_target": "iOS 18",
         "median_warm_latency_ms": 125.7,

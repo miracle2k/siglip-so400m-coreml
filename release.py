@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Stamp, validate, and package Core ML release artifacts."""
+"""Create one immutable Core ML artifact directory.
+
+The source repository contains conversion and verification tooling. Every
+deployable build is packaged independently as <variant>/<revision>/ with its
+own archive, manifest, and checksums; it is not a repository-wide release.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -19,17 +25,26 @@ import coremltools as ct
 
 MODEL_ID = "google/siglip-so400m-patch14-384"
 MODEL_REVISION = "9fdffc58afc957d1a03a25b10dba0329ab15c2a3"
-RELEASE_VERSION = "0.2.0"
-REPOSITORY = "https://github.com/miracle2k/siglip-so400m-coreml"
+SOURCE_REPOSITORY = "https://github.com/miracle2k/siglip-so400m-coreml"
+ARTIFACT_STATUSES = ("stable", "experimental", "candidate")
 VARIANTS = {
     "p8": {
         "bits": 8,
         "compression": "kmeans-8bit-scalar-per-tensor",
+        "default_status": "stable",
         "minimum_deployment_target": "iOS17",
         "model_graph_sha256": "2f64d448265107972b2c41fa7a13f4e436b76c4f819e23d9131f1c7b26b32472",
         "quantization": "palette-kmeans-8bit-per-tensor",
         "weights_sha256": "0e84cef4bcb2fd9c4eee9496809248463998506c7185f57e720a44f874aa04d9",
         "filename": "SigLIPSO400M384-P8.mlpackage",
+        "legacy_archive": {
+            "archive_bytes": 403610178,
+            "archive_sha256": "28fd93f254d56dcfa2c9155c7d65d86d9fe63d688a12012621660f17db9f0738",
+            "package_bytes": 427777672,
+            "package_tree_sha256": "4fd72827155aedb94ab0a412a2b9fe8f38a31eb1e250c325f9773d130697680f",
+            "source_commit": "f8c6a35a2d1535e65d2efe58b68bea2807efb34b",
+            "source_package_tree_sha256": "8ab594c40abb7b9f658ce38e812de82ca70a5407f54e9c2dd471567754f8aa40",
+        },
         "recommended": True,
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
@@ -39,11 +54,20 @@ VARIANTS = {
     "p6": {
         "bits": 6,
         "compression": "kmeans-6bit-scalar-per-tensor",
+        "default_status": "experimental",
         "minimum_deployment_target": "iOS17",
         "model_graph_sha256": "b888adaf476936ca40eb28b3f27c2b005163d341040d3f415588078a12e11dfd",
         "quantization": "palette-kmeans-6bit-per-tensor",
         "weights_sha256": "d583e30c3583d935ba5b15c3c0adfdbb172779aee40bf63f8973017c0cd194fd",
         "filename": "SigLIPSO400M384-P6.mlpackage",
+        "legacy_archive": {
+            "archive_bytes": 314336486,
+            "archive_sha256": "ae94fa8f3d992e70a58fb05b642f408fe5caae317f1dbe988c8b056a220cc045",
+            "package_bytes": 321091552,
+            "package_tree_sha256": "1974e6bcbdda786c0c92e1133cc82973d50e7870375ad30e43f3bcf3122ca58e",
+            "source_commit": "f8c6a35a2d1535e65d2efe58b68bea2807efb34b",
+            "source_package_tree_sha256": "429cf60610f26120c485ae7be19c966731381a9ce0b5f2d6b5258b5ab3e53193",
+        },
         "recommended": False,
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
@@ -53,12 +77,21 @@ VARIANTS = {
     "p6g16": {
         "bits": 6,
         "compression": "kmeans-6bit-scalar-per-grouped-channel-16",
+        "default_status": "candidate",
         "minimum_deployment_target": "iOS18",
         "model_graph_sha256": "c9de8d03751a01339314e70d76c6af8b276c21ee578570dbe075f581ca5019a8",
         "quantization": "palette-kmeans-6bit-grouped-channel-16",
         "required_source_package_tree_sha256": "708fd43a1ed2f9ca1d5097c97c5890fe3d5551c4a31c9df1bdedc55826c17b21",
         "weights_sha256": "782c2b3c305b8826151f334a93d0de558a65d705963f138d17ab9c5d540e0843",
         "filename": "SigLIPSO400M384-P6G16.mlpackage",
+        "legacy_archive": {
+            "archive_bytes": 319112765,
+            "archive_sha256": "fdbc316249c5f25b05ccdc31a07ceb284e8827b38073ed20941352e2da2aba50",
+            "package_bytes": 324372192,
+            "package_tree_sha256": "26cd912a5062d67a30c6bea0db3f2cfe86575207ee59bfbf8238920232d3bb56",
+            "source_commit": "24b13c3cb407df589f32d66645d9e8ce8e440810",
+            "source_package_tree_sha256": "708fd43a1ed2f9ca1d5097c97c5890fe3d5551c4a31c9df1bdedc55826c17b21",
+        },
         "recommended": False,
         "embedding_space_id": (
             "siglip-so400m-p14-384@9fdffc58:pooler-l2:"
@@ -83,9 +116,7 @@ def file_sha256(path: Path) -> str:
 
 def tree_sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    for item in sorted(
-        candidate for candidate in path.rglob("*") if candidate.is_file()
-    ):
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
         digest.update(item.relative_to(path).as_posix().encode())
         digest.update(b"\0")
         with item.open("rb") as handle:
@@ -146,10 +177,9 @@ def validate_source(source: Path, variant: str) -> tuple[Path, Any, str, str, st
         raise ValueError(f"Unexpected model provenance in {source.name}")
     if metadata.userDefined.get("quantization") != config["quantization"]:
         raise ValueError(f"Unexpected quantization in {source.name}")
-    if (
-        metadata.userDefined.get("minimum_deployment_target")
-        != config["minimum_deployment_target"]
-    ):
+    if metadata.userDefined.get("minimum_deployment_target") != config[
+        "minimum_deployment_target"
+    ]:
         raise ValueError(f"Unexpected deployment target in {source.name}")
 
     source_tree_hash = tree_sha256(source)
@@ -169,7 +199,10 @@ def stamp(
     validated: tuple[Path, Any, str, str, str],
     destination: Path,
     variant: str,
-    release_version: str,
+    artifact_id: str,
+    artifact_revision: str,
+    artifact_status: str,
+    source_commit: str,
 ) -> dict[str, Any]:
     source, specification, source_tree_hash, source_weight_hash, graph_hash = validated
     destination = destination.resolve()
@@ -179,24 +212,28 @@ def stamp(
         or destination.is_relative_to(source)
     ):
         raise ValueError("Source and destination package paths must not overlap")
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite immutable artifact package: {destination}")
+
     config = VARIANTS[variant]
     metadata = specification.description.metadata
-    if destination.exists():
-        shutil.rmtree(destination)
-    shutil.copytree(source, destination)
     metadata.author = "miracle2k"
     metadata.license = "Apache-2.0; derived from google/siglip-so400m-patch14-384"
-    metadata.versionString = release_version
+    metadata.versionString = artifact_id
+    for key in ("release_repository", "release_version"):
+        metadata.userDefined.pop(key, None)
     metadata.userDefined.update(
         {
+            "artifact_id": artifact_id,
+            "artifact_revision": artifact_revision,
+            "artifact_status": artifact_status,
+            "conversion_source_commit": source_commit,
+            "conversion_source_repository": SOURCE_REPOSITORY,
             "embedding_space_id": str(config["embedding_space_id"]),
-            "release_repository": REPOSITORY,
-            "release_version": release_version,
         }
     )
-    model_path(destination).write_bytes(
-        specification.SerializeToString(deterministic=True)
-    )
+    shutil.copytree(source, destination)
+    model_path(destination).write_bytes(specification.SerializeToString(deterministic=True))
     if shutil.which("xattr"):
         subprocess.run(["xattr", "-cr", str(destination)], check=True)
     for directory in (item for item in destination.rglob("*") if item.is_dir()):
@@ -209,17 +246,19 @@ def stamp(
     if release_weight_hash != source_weight_hash:
         raise ValueError(f"Metadata stamping changed the weights in {source.name}")
     return {
-        "package_bytes": tree_size(destination),
-        "package_tree_sha256": tree_sha256(destination),
+        "bytes": tree_size(destination),
+        "filename": destination.name,
         "model_graph_sha256": graph_hash,
-        "source_package_tree_sha256": source_tree_hash,
+        "source_tree_sha256": source_tree_hash,
+        "tree_sha256": tree_sha256(destination),
         "weights_sha256": release_weight_hash,
     }
 
 
 def deterministic_zip(package: Path, output: Path, root: Path) -> None:
     temporary = output.with_suffix(output.suffix + ".tmp")
-    temporary.unlink(missing_ok=True)
+    if temporary.exists():
+        raise FileExistsError(f"Temporary archive path already exists: {temporary}")
     entries = [
         (source.relative_to(package.parent).as_posix(), source)
         for source in package.rglob("*")
@@ -238,78 +277,115 @@ def deterministic_zip(package: Path, output: Path, root: Path) -> None:
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | 0o644) << 16
-            with (
-                source.open("rb") as reader,
-                archive.open(info, "w", force_zip64=True) as writer,
-            ):
+            with source.open("rb") as reader, archive.open(
+                info, "w", force_zip64=True
+            ) as writer:
                 shutil.copyfileobj(reader, writer, length=1024 * 1024)
     temporary.replace(output)
 
 
+def validate_archive(path: Path, package_filename: str) -> None:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with zipfile.ZipFile(path) as archive:
+        broken = archive.testzip()
+        if broken:
+            raise ValueError(f"Corrupt archive member in {path.name}: {broken}")
+        names = archive.namelist()
+    if len(names) != len(set(names)):
+        raise ValueError(f"Archive has duplicate members: {path.name}")
+    expected = {
+        "LICENSE",
+        "NOTICE",
+        f"{package_filename}/Manifest.json",
+        f"{package_filename}/Data/com.apple.CoreML/model.mlmodel",
+        f"{package_filename}/Data/com.apple.CoreML/weights/weight.bin",
+    }
+    if set(names) != expected:
+        raise ValueError(
+            f"Unexpected archive layout in {path.name}: "
+            f"missing={sorted(expected - set(names))}, "
+            f"extra={sorted(set(names) - expected)}"
+        )
+
+
+def legacy_package_details(archive: Path, variant: str) -> dict[str, Any]:
+    config = VARIANTS[variant]
+    legacy = config["legacy_archive"]
+    if archive.stat().st_size != legacy["archive_bytes"]:
+        raise ValueError(f"Unexpected legacy archive size: {archive.name}")
+    if file_sha256(archive) != legacy["archive_sha256"]:
+        raise ValueError(f"Unexpected legacy archive hash: {archive.name}")
+    validate_archive(archive, str(config["filename"]))
+    return {
+        "bytes": legacy["package_bytes"],
+        "filename": config["filename"],
+        "model_graph_sha256": config["model_graph_sha256"],
+        "source_tree_sha256": legacy["source_package_tree_sha256"],
+        "tree_sha256": legacy["package_tree_sha256"],
+        "weights_sha256": config["weights_sha256"],
+    }
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    temporary.replace(path)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    for variant in VARIANTS:
-        parser.add_argument(f"--{variant}", type=Path)
-    parser.add_argument("--dist", type=Path, default=Path("dist"))
-    parser.add_argument("--release-version", default=RELEASE_VERSION)
-    parser.add_argument("--write-root-metadata", action="store_true")
-    args = parser.parse_args()
+def source_commit(root: Path, supplied: str | None) -> str:
+    if supplied is None:
+        supplied = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", supplied):
+        raise ValueError("Source commit must be a full 40-character lowercase SHA-1")
+    subprocess.run(
+        ["git", "-C", str(root), "cat-file", "-e", f"{supplied}^{{commit}}"],
+        check=True,
+    )
+    return supplied
 
-    root = Path(__file__).resolve().parent
-    dist = args.dist.expanduser().resolve()
-    source_paths = {
-        variant: supplied.expanduser().resolve()
-        for variant in VARIANTS
-        if (supplied := getattr(args, variant)) is not None
-    }
-    if not source_paths:
-        parser.error("At least one source package is required")
-    if args.write_root_metadata and set(source_paths) != set(VARIANTS):
-        parser.error(
-            "--write-root-metadata requires a complete P8, P6, and P6G16 release bundle"
-        )
-    validated = {
-        variant: validate_source(source_paths[variant], variant)
-        for variant in source_paths
-    }
-    packages = dist / "packages"
-    packages.mkdir(parents=True, exist_ok=True)
-    artifacts: list[dict[str, Any]] = []
 
-    for variant in source_paths:
-        config = VARIANTS[variant]
-        package = packages / str(config["filename"])
-        details = stamp(validated[variant], package, variant, args.release_version)
-        archive_name = (
-            f"{package.stem}-{config['minimum_deployment_target']}-"
-            f"v{args.release_version}.mlpackage.zip"
-        )
-        archive_path = dist / archive_name
-        deterministic_zip(package, archive_path, root)
-        artifacts.append(
-            {
-                "archive_bytes": archive_path.stat().st_size,
-                "archive_filename": archive_name,
-                "archive_sha256": file_sha256(archive_path),
-                "compression": config["compression"],
-                "embedding_space_id": config["embedding_space_id"],
-                "minimum_deployment_target": config["minimum_deployment_target"],
-                "package_filename": package.name,
-                "quantization": config["quantization"],
-                "recommended": config["recommended"],
-                "variant": variant,
-                **details,
-            }
-        )
+def clean_source_commit(root: Path, supplied: str | None) -> str:
+    head = source_commit(root, None)
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    if status:
+        raise ValueError("Refusing to package a source model from a dirty worktree")
+    if supplied is not None and supplied != head:
+        raise ValueError("--source-commit must match the clean HEAD when using --source")
+    return head
 
-    manifest = {
-        "artifacts": artifacts,
+
+def artifact_manifest(
+    variant: str,
+    revision: str,
+    status: str,
+    source_commit_sha: str,
+    archive: Path,
+    package: dict[str, Any],
+) -> dict[str, Any]:
+    config = VARIANTS[variant]
+    artifact_id = f"{variant}-{revision}"
+    return {
+        "artifact": {
+            "id": artifact_id,
+            "recommended": config["recommended"],
+            "revision": revision,
+            "status": status,
+            "variant": variant,
+        },
+        "archive": {
+            "bytes": archive.stat().st_size,
+            "filename": archive.name,
+            "sha256": file_sha256(archive),
+        },
         "base_model": {
             "license": "Apache-2.0",
             "repository": MODEL_ID,
@@ -342,41 +418,128 @@ def main() -> None:
                 "shape": [1, 1152],
             },
         },
-        "conversion": {
+        "license": "Apache-2.0",
+        "license_files_in_archive": ["LICENSE", "NOTICE"],
+        "package": {
+            **package,
+            "compression": config["compression"],
+            "embedding_space_id": config["embedding_space_id"],
+            "minimum_deployment_target": config["minimum_deployment_target"],
+            "quantization": config["quantization"],
+        },
+        "provenance": {
+            "conversion_source_commit": source_commit_sha,
+            "conversion_source_repository": SOURCE_REPOSITORY,
             "coremltools": "9.0",
             "format": "mlprogram",
             "python": ">=3.11,<3.12",
-            "source_tag": f"v{args.release_version}",
             "torch": "2.7.0",
             "transformers": "4.48.1",
-            "uv_lock_sha256": file_sha256(root / "uv.lock"),
         },
-        "license": "Apache-2.0",
-        "license_files_in_archives": ["LICENSE", "NOTICE"],
-        "release_version": args.release_version,
-        "repository": REPOSITORY,
-        "results": "RESULTS.json",
         "schema_version": 1,
-        "verification": {
-            "compute_units": "CPU_ONLY",
-            "reference_file": "tests/reference_outputs.npz",
-            "reference_sha256": file_sha256(root / "tests/reference_outputs.npz"),
-            "script": "verify.py",
-        },
     }
-    manifest_path = dist / "MODEL_MANIFEST.json"
-    write_json(manifest_path, manifest)
-    shutil.copy2(root / "RESULTS.json", dist / "RESULTS.json")
-    checksums = "".join(
-        f"{item['archive_sha256']}  {item['archive_filename']}\n" for item in artifacts
+
+
+def parse_revision(value: str) -> str:
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", value):
+        raise argparse.ArgumentTypeError(
+            "Artifact revisions use lowercase letters, digits, dots, underscores, and hyphens"
+        )
+    return value
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variant", choices=VARIANTS, required=True)
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--source",
+        type=Path,
+        help="Fresh .mlpackage to validate, stamp, and archive.",
     )
-    checksums += f"{file_sha256(manifest_path)}  MODEL_MANIFEST.json\n"
-    checksums += f"{file_sha256(root / 'RESULTS.json')}  RESULTS.json\n"
-    checksum_path = dist / "SHA256SUMS"
-    checksum_path.write_text(checksums)
-    if args.write_root_metadata:
-        shutil.copy2(manifest_path, root / "MODEL_MANIFEST.json")
-        shutil.copy2(checksum_path, root / "SHA256SUMS")
+    source_group.add_argument(
+        "--archive",
+        type=Path,
+        help="One of the three pinned legacy archives to preserve byte-for-byte.",
+    )
+    parser.add_argument("--artifact-revision", type=parse_revision, required=True)
+    parser.add_argument("--status", choices=ARTIFACT_STATUSES)
+    parser.add_argument("--source-commit")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="New immutable artifact directory, for example dist/p8/r1.",
+    )
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parent
+    source_commit_sha = (
+        clean_source_commit(root, args.source_commit)
+        if args.source is not None
+        else source_commit(root, args.source_commit)
+    )
+    if args.archive is not None:
+        expected_legacy_commit = str(VARIANTS[args.variant]["legacy_archive"]["source_commit"])
+        if args.source_commit != expected_legacy_commit:
+            parser.error(
+                "--archive requires the pinned --source-commit "
+                f"{expected_legacy_commit}"
+            )
+    output = args.output.expanduser().resolve()
+    if output.exists():
+        raise FileExistsError(f"Refusing to overwrite immutable artifact: {output}")
+    if output.parent.exists() and not output.parent.is_dir():
+        raise NotADirectoryError(output.parent)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = output.with_name(f".{output.name}.tmp-{os.getpid()}")
+    if staging.exists():
+        raise FileExistsError(f"Temporary artifact directory already exists: {staging}")
+    staging.mkdir()
+
+    try:
+        variant = args.variant
+        config = VARIANTS[variant]
+        revision = args.artifact_revision
+        status = args.status or str(config["default_status"])
+        archive_name = (
+            f"{Path(str(config['filename'])).stem}-"
+            f"{config['minimum_deployment_target']}-{revision}.mlpackage.zip"
+        )
+        archive_path = staging / archive_name
+
+        if args.source is not None:
+            package_path = staging / str(config["filename"])
+            package = stamp(
+                validate_source(args.source.expanduser(), variant),
+                package_path,
+                variant,
+                f"{variant}-{revision}",
+                revision,
+                status,
+                source_commit_sha,
+            )
+            deterministic_zip(package_path, archive_path, root)
+        else:
+            source_archive = args.archive.expanduser().resolve()
+            package = legacy_package_details(source_archive, variant)
+            shutil.copy2(source_archive, archive_path)
+
+        validate_archive(archive_path, str(config["filename"]))
+        manifest = artifact_manifest(
+            variant, revision, status, source_commit_sha, archive_path, package
+        )
+        manifest_path = staging / "manifest.json"
+        write_json(manifest_path, manifest)
+        (staging / "SHA256SUMS").write_text(
+            f"{manifest['archive']['sha256']}  {archive_path.name}\n"
+            f"{file_sha256(manifest_path)}  manifest.json\n"
+        )
+        staging.replace(output)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
     print(json.dumps(manifest, indent=2, sort_keys=True))
 
 
